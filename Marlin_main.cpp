@@ -48,7 +48,7 @@ http://reprap.org/pipermail/reprap-dev/2011-May/003323.html
 #include <SPI.h>
 #endif
 
-#define VERSION_STRING  "1.1.0.15"
+#define VERSION_STRING  "1.1.0.16"
 
 //Stepper Movement Variables
 
@@ -410,7 +410,7 @@ void setup() {
 	MYSERIAL.begin(BAUDRATE);
 	//Setup_RFID(); ///////////////////// J'ajoute ma commande au sein du Setup.
 	MYSERIAL2.begin(BAUDRATE_RFID);
-	MYSERIAL3.begin(BAUDRATE_RFID);
+	MYSERIAL3.begin(BAUDRATE_RFID); 
 
 	declaration_personnal_pin();
 
@@ -1942,6 +1942,14 @@ void process_commands()
 			SERIAL_PROTOCOLPGM(" /");
 			SERIAL_PROTOCOL_F(degTargetBed(),1);
 #endif //TEMP_BED_PIN
+        for (int8_t cur_extruder = 0; cur_extruder < EXTRUDERS; ++cur_extruder) {
+          SERIAL_PROTOCOLPGM(" T");
+          SERIAL_PROTOCOL(cur_extruder);
+          SERIAL_PROTOCOLPGM(":");
+          SERIAL_PROTOCOL_F(degHotend(cur_extruder),1);
+          SERIAL_PROTOCOLPGM(" /");
+          SERIAL_PROTOCOL_F(degTargetHotend(cur_extruder),1);
+        }
 #else
 			SERIAL_ERROR_START;
 			SERIAL_ERRORLNPGM(MSG_ERR_NO_THERMISTORS);
@@ -2013,15 +2021,22 @@ void process_commands()
 						if(residencyStart > -1)
 						{
 							codenum = ((TEMP_RESIDENCY_TIME * 1000UL) - (millis() - residencyStart)) / 1000UL;
-							SERIAL_PROTOCOLLN( codenum );
+							SERIAL_PROTOCOL( codenum );
 						}
 						else 
 						{
-							SERIAL_PROTOCOLLN( "?" );
+							SERIAL_PROTOCOL( "?" );
 						}
-#else
-						SERIAL_PROTOCOLLN("");
 #endif
+            for (int8_t cur_extruder = 0; cur_extruder < EXTRUDERS; ++cur_extruder) {
+                      SERIAL_PROTOCOLPGM(" T");
+                      SERIAL_PROTOCOL(cur_extruder);
+                      SERIAL_PROTOCOLPGM(":");
+                      SERIAL_PROTOCOL_F(degHotend(cur_extruder),1);
+                      SERIAL_PROTOCOLPGM(" /");
+                      SERIAL_PROTOCOL_F(degTargetHotend(cur_extruder),1);
+            }
+            SERIAL_PROTOCOLLN("");
 						codenum = millis();
 					}
 					manage_heater();
