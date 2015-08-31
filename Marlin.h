@@ -35,7 +35,6 @@
 #endif
 
 #include "MarlinSerial.h"
-#include "Marlin_RFID_HWSerial2.h"
 
 #ifndef cbi
 #define cbi(sfr, bit) (_SFR_BYTE(sfr) &= ~_BV(bit))

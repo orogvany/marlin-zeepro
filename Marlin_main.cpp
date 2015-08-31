@@ -40,15 +40,12 @@ http://reprap.org/pipermail/reprap-dev/2011-May/003323.html
 #include "ConfigurationStore.h"
 #include "language.h"
 #include "pins_arduino.h"
-#include "Marlin_RFID_HWSerial2.h"
-//#include "SL032.h"
-#include "RFID_ZIM.h"
 
 #if DIGIPOTSS_PIN > -1
 #include <SPI.h>
 #endif
 
-#define VERSION_STRING  "1.1.0.16"
+#define VERSION_STRING  "1.1.0.17"
 
 //Stepper Movement Variables
 
@@ -166,7 +163,6 @@ bool Stopped=false;
 
 bool Strip_Led_State = false;
 bool Top_Led_State = false;
-bool Antenna_RFID_State = false;
 
 
 //////////////////////////////   FIN    ////////////////////////////////////////////////////////////////
@@ -178,23 +174,6 @@ bool premier_transport = true;
 
 //////////////////////// FIN fonction voyage //////////////////////////////////////////
 
-
-
-
-////////////////////////////////////Fonction pour le RFID/////////////////////////////////////////////////////
-
-// byte checksum_RFID;
-// float RFID_data[32]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 };
-byte TAG_RFID_E0[16]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-byte TAG_RFID_E1[16]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-
-float Distance_Filament_E0 = 0;
-float Distance_Filament_E1 = 0;
-float Distance_Consumption_E0 = 0;
-float Distance_Consumption_E1 = 0;
-bool Is_PVA_E0 = false;
-bool Is_PVA_E1 = false;
-bool Has_Paused_in_Print = false;
 
 ///////////////////////////Fonction pour les deux thermistance/////////////////
 
@@ -408,9 +387,6 @@ void setup() {
 	setup_green_led();
 	suicide_Zim_Setup();
 	MYSERIAL.begin(BAUDRATE);
-	//Setup_RFID(); ///////////////////// J'ajoute ma commande au sein du Setup.
-	MYSERIAL2.begin(BAUDRATE_RFID);
-	MYSERIAL3.begin(BAUDRATE_RFID); 
 
 	declaration_personnal_pin();
 
@@ -468,17 +444,6 @@ void setup() {
 
 #ifdef EXTRUDERFAN_PIN
 	SET_OUTPUT(EXTRUDERFAN_PIN); //Set pin used for extruder cooling fan
-#endif
-
-#ifdef RFID_ZIM
-	RFID_init();
-	//envoie_commande(Initialize_Port,length_Initialize_Port,2);	
-	/*
-	envoie_commande(Set_Antenna_Status_OFF,length_Set_Antenna_Status_OFF,2); 	
-	//envoie_commande(Initialize_Port,length_Initialize_Port,3);	
-	envoie_commande(Set_Antenna_Status_OFF,length_Set_Antenna_Status_OFF,3); 
-	Antenna_RFID_State= false;	
-	SERIAL_PROTOCOL("\n");*/
 #endif
 	Read_offset_E2PROM();
 	SERIAL_PROTOCOL("END_INITIALISATION\n");
@@ -539,28 +504,10 @@ void loop() {
 
 }
 
-
-#ifdef RFIDSUPPORT
-int cmdPort = -1;
-#endif //RFIDSUPPORT
-
-
 void get_command() {
 	while( MYSERIAL.available() > 0  && buflen < BUFSIZE)
 	{
-		// add RFID support
-#ifdef RFIDSUPPORT
-		if (-1 == cmdPort) {
-			if (MYSERIAL.available()) {
-				cmdPort = 0;
-			}
-		}
-		if (0 == cmdPort) {
-			serial_char = MYSERIAL.read();
-		}
-#else //RFIDSUPPORT
 		serial_char = MYSERIAL.read();
-#endif //RFIDSUPPORT
 		
 		//DIY here I have re-added messages (just translation, not cleaned - PNI)
 		if (MSG_PRONTERFACE== true) {
@@ -587,10 +534,6 @@ void get_command() {
 				serial_char == '\r' || 
 				(serial_char == ':' && comment_mode == false) || 
 				serial_count >= (MAX_CMD_SIZE - 1) ) {
-			// RFID support
-#ifdef RFIDSUPPORT
-			cmdPort = -1;
-#endif //RFIDSUPPORT
 
 			if(!serial_count)
 			{ //if empty line
@@ -956,38 +899,6 @@ FORCE_INLINE void Center_head() {
 	return;
 }
 
-void Reverse_20mm() {
-	float fr_retract = FEEDRATE_EXTRUDE_RETRACT;
-	uint8_t original_extruder = active_extruder;
-	
-	// first extruder
-	if(Distance_Filament_E0 > 0) {
-		SetActiveExtruder(0);
-		
-		if (Is_PVA_E0 == true) {
-			fr_retract = FEEDRATE_EXTRUDE_RETRACT_PVA;
-		}
-		
-		Moving_E(-DISTANCE_EXTRUDE_RETRACT, fr_retract);
-	}
-	
-	// second extruder
-	if(Distance_Filament_E1 > 0) {
-		SetActiveExtruder(1);
-		fr_retract = FEEDRATE_EXTRUDE_RETRACT;
-		
-		if (Is_PVA_E1 == true) {
-			fr_retract = FEEDRATE_EXTRUDE_RETRACT_PVA;
-		}
-		
-		Moving_E(-DISTANCE_EXTRUDE_RETRACT, fr_retract);
-	}
-	
-	SetActiveExtruder(original_extruder);
-	
-	return;
-}
-
 void Homing_head() {
 	// Homing
 	HOMEAXIS(X);
@@ -1116,189 +1027,9 @@ void Read_offset_E2PROM() {
 	return;
 }
 
-//TODO need clean these two RFID functions later
-void Write_RFID1() {
-	//#ifdef TEST
-	//	return; //do nothing for test
-	//#endif //TEST
-
-	if (Distance_Filament_E0 >= DISTANCE_EXTRUDE_RETRACT) {
-		Distance_Filament_E0 = Distance_Filament_E0 - DISTANCE_EXTRUDE_RETRACT;
-	}
-
-	if(Distance_Filament_E0 > 0) {
-		byte commande_ecriture_tag_E0[]={0x0a,0x00,0x00,0x00,0x13,0x02,0x06,0x00,0x00,0x00,0x00};
-		byte length_commande_ecriture_tag_E0 = sizeof(commande_ecriture_tag_E0);
-		byte TAG_E0[16]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-
-		unsigned long int lUsedFilament = (((unsigned long int) TAG_RFID_E0[8] & 0xf) << 16) + ((unsigned long int) TAG_RFID_E0[9] << 8) + (unsigned long int) TAG_RFID_E0[10] + (unsigned long int) ceil(Distance_Filament_E0);
-
-		TAG_RFID_E0[8] = (TAG_RFID_E0[8]  & 0xf0) + (byte) (lUsedFilament >> 16);
-		TAG_RFID_E0[9] = (byte) ((lUsedFilament >> 8) & 0xff);
-		TAG_RFID_E0[10] = (byte) (lUsedFilament & 0xff);
-
-		//calcul checksum 
-		byte checksum_RFID_E0 = 0;
-
-		for (int i=0; i<15;i++) {
-			checksum_RFID_E0 = TAG_RFID_E0[i] ^ checksum_RFID_E0;
-		}
-
-		TAG_RFID_E0[15] = checksum_RFID_E0;
-
-		for (int i=0; i<16; i++) {
-			TAG_E0[i] = TAG_RFID_E0[i]; 
-		}
-
-		////Activer l'antenne///
-		if (Antenna_RFID_State== false) {						
-			//envoie_commande(Set_Antenna_Status_ON,length_Set_Antenna_Status_ON,2); 						
-			Antenna_RFID_State= true;
-		}		
-		//// fin de l'activation///////////	
-
-		envoie_commande(Mifare_Request,length_Mifare_Request,2); 		
-		envoie_commande(Mifare_Anticollision,length_Mifare_Anticollision,2); 
-		envoie_commande(Mifare_Select,length_Mifare_Select,2); 
-		envoie_commande(Mifare_Read1, length_Mifare_Read1, 2);
-
-		for (int i=0; i<4; i++) {
-			commande_ecriture_tag_E0[i+7] = TAG_E0[i];
-		}	
-
-		envoie_commande(commande_ecriture_tag_E0, length_commande_ecriture_tag_E0, 2);  		
-
-		commande_ecriture_tag_E0[6]=0x07;
-
-		for (int i=4; i<8;i++) {
-			commande_ecriture_tag_E0[i+3]=TAG_E0[i];
-		}
-
-		envoie_commande(commande_ecriture_tag_E0, length_commande_ecriture_tag_E0, 2); 
-
-		commande_ecriture_tag_E0[6]=0x08;
-
-		for (int i=8; i<12;i++) {
-			commande_ecriture_tag_E0[i-1]=TAG_E0[i];
-		}
-		envoie_commande(commande_ecriture_tag_E0, length_commande_ecriture_tag_E0, 2); 
-
-		commande_ecriture_tag_E0[6]=0x09;
-
-		for (int i=12; i<16;i++) {
-			commande_ecriture_tag_E0[i-5]=TAG_E0[i];
-		}
-
-		envoie_commande(commande_ecriture_tag_E0, length_commande_ecriture_tag_E0, 2); 	
-
-		envoie_commande(Mifare_Hlta, length_Mifare_Hlta, 2); 
-	}
-}
-
-void Write_RFID2() {
-	//#ifdef TEST
-	//	return; //do nothing for test
-	//#endif //TEST
-
-	if (Distance_Filament_E1 >= DISTANCE_EXTRUDE_RETRACT) {
-		Distance_Filament_E1 = Distance_Filament_E1 - DISTANCE_EXTRUDE_RETRACT;
-	}
-
-	if(Distance_Filament_E1 > 0) {
-		byte commande_ecriture_tag_E1[]={0x0a,0x00,0x00,0x00,0x13,0x02,0x06,0x00,0x00,0x00,0x00};
-		byte length_commande_ecriture_tag_E1 = sizeof(commande_ecriture_tag_E1);
-		byte TAG_E1[16]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-
-		unsigned long int lUsedFilament = (((unsigned long int) TAG_RFID_E1[8] & 0xf) << 16) + ((unsigned long int) TAG_RFID_E1[9] << 8) + (unsigned long int) TAG_RFID_E1[10] + (unsigned long int) ceil(Distance_Filament_E1);
-
-		TAG_RFID_E1[8] = (TAG_RFID_E1[8]  & 0xf0) + (byte) (lUsedFilament >> 16);
-		TAG_RFID_E1[9] = (byte) ((lUsedFilament >> 8) & 0xff);
-		TAG_RFID_E1[10] = (byte) (lUsedFilament & 0xff);
-
-		//calcul checksum 
-		byte checksum_RFID_E1 = 0x00;
-
-		for (int i=0; i<15;i++) {
-			checksum_RFID_E1=TAG_RFID_E1[i]^checksum_RFID_E1;
-		}
-
-		TAG_RFID_E1[15]=checksum_RFID_E1;
 
 
-		for (int i=0;i<16;i++) {
-			TAG_E1[i]=TAG_RFID_E1[i];  
-		}
 
-		////Activer l'antenne///
-		if (Antenna_RFID_State== false) {						
-			//envoie_commande(Set_Antenna_Status_ON,length_Set_Antenna_Status_ON,3); 						
-			Antenna_RFID_State= true;
-		}		
-		//// fin de l'activation///////////			
-
-		envoie_commande(Mifare_Request,length_Mifare_Request,3); 		
-		envoie_commande(Mifare_Anticollision,length_Mifare_Anticollision,3); 
-		envoie_commande(Mifare_Select,length_Mifare_Select,3); 
-		envoie_commande(Mifare_Read1,length_Mifare_Read1,3);
-
-		for (int i=0; i<4;i++) {
-			commande_ecriture_tag_E1[i+7]=TAG_E1[i];
-		}	
-
-		envoie_commande(commande_ecriture_tag_E1,length_commande_ecriture_tag_E1,3);  
-
-		commande_ecriture_tag_E1[6]=0x07;
-
-		for (int i=4; i<8;i++) {
-			commande_ecriture_tag_E1[i+3]=TAG_E1[i];
-		}
-
-		envoie_commande(commande_ecriture_tag_E1,length_commande_ecriture_tag_E1, 3); 
-
-		commande_ecriture_tag_E1[6]=0x08;
-
-		for (int i=8; i<12;i++) {
-			commande_ecriture_tag_E1[i-1]=TAG_E1[i];
-		}
-
-		envoie_commande(commande_ecriture_tag_E1,length_commande_ecriture_tag_E1, 3); 
-
-		commande_ecriture_tag_E1[6]=0x09;
-
-		for (int i=12; i<16;i++) {
-			commande_ecriture_tag_E1[i-5]=TAG_E1[i];
-		}
-
-		envoie_commande(commande_ecriture_tag_E1,length_commande_ecriture_tag_E1,3); 	
-
-		envoie_commande(Mifare_Hlta,length_Mifare_Hlta,3); 
-	}
-}
-
-void Reinitialize_E0_E1_Quantity(bool assign_consumption) {
-	if (assign_consumption == true) {
-		// assign old quantity as consumption
-		if (Has_Paused_in_Print == true) {
-			Distance_Consumption_E0 += Distance_Filament_E0;
-			Distance_Consumption_E1 += Distance_Filament_E1;
-		}
-		else {
-			Distance_Consumption_E0 = Distance_Filament_E0;
-			Distance_Consumption_E1 = Distance_Filament_E1;
-		}
-	}
-/* 
-	else {
-		Distance_Consumption_E0 = 0;
-		Distance_Consumption_E1 = 0;
-	}
- */
-	
-	Distance_Filament_E0 = 0;
-	Distance_Filament_E1 = 0;
-	
-	return;
-}
 
 void Set_temperature_to_0Degree() {
 	// set temperature to 0
@@ -1404,76 +1135,11 @@ void Set_to_Temperature_in_Resume(uint8_t extruder_set, float temper_set) {
 	return;
 }
 
-void Extrude_20mm_in_Resume(bool extrude_e0, bool extrude_e1) {
-	float fr_extrude = FEEDRATE_EXTRUDE_RETRACT;
-	uint8_t original_extruder = active_extruder;
-	
-	// first extruder
-	if (extrude_e0 == true) {
-		SetActiveExtruder(0);
-		
-		if (Is_PVA_E0 == true) {
-			fr_extrude = FEEDRATE_EXTRUDE_RETRACT_PVA;
-		}
-		
-		Moving_E(DISTANCE_EXTRUDE_RETRACT, fr_extrude);
-	}
-	
-	// second extruder
-	if (extrude_e1 == true) {
-		SetActiveExtruder(1);
-		fr_extrude = FEEDRATE_EXTRUDE_RETRACT;
-		
-		if (Is_PVA_E1 == true) {
-			fr_extrude = FEEDRATE_EXTRUDE_RETRACT_PVA;
-		}
-		
-		Moving_E(DISTANCE_EXTRUDE_RETRACT, fr_extrude);
-	}
-	
-	SetActiveExtruder(original_extruder);
-	
-	return;
-}
-
 void kill_Zim() {
-	SERIAL_PROTOCOL("\n Oh noooo, You kill the ZIM :-( \n");
+	SERIAL_PROTOCOL("\nShutting down the Zim\n");
 	quickStop();
-/* 
-	//TODO check if it's no meaning for this part 1 of LED control? - PNI
-	digitalWrite(Commande_Green, LOW);   // turn the LED on (LOW is the voltage level)
-	//  delay(1000); 
-	digitalWrite(Commande_Green, HIGH);   // turn the LED on (HIGH is the voltage level)
-	//  delay(1000);               // wait for a second
-	digitalWrite(Commande_Green, LOW);    // turn the LED off by making the voltage LOW
-	//  delay(1000);
 
-	digitalWrite(Commande_Green, HIGH);   // turn the LED on (HIGH is the voltage level)
-	//  delay(1000);               // wait for a second
-	digitalWrite(Commande_Green, LOW);    // turn the LED off by making the voltage LOW
-	//  delay(1000);               // wait for a second
-	// digitalWrite(SUICIDE_Zim_PIN, HIGH);    // turn the LED off by making the voltage LOW
-	//delay(1000);
-	// part 1 of LED control end
- */
-	//Write_RFID1();
-	//Write_RFID2();
-
-	if ((Distance_Filament_E0 > 0) || (Distance_Filament_E1 > 0)) {
-		Moving_Z(11, 200); // old Moving_Z_4 (perhaps for power off in printing)
-		Reverse_20mm();
-	}
-
-	//Reinitialize_E0_E1_Quantity(false);
-	//SERIAL_PROTOCOL("/n move_Z\n");
-
-	//Homing_head();
-	//Set_temperature_to_0Degree();  
 	disable_heater();
-	
-	// old Moving_Z_3 here, but why move up platform in power off in any case? disable it for security for now - PNI
-	//TODO check the reason of this strange action of platform rise (1mm)
-	// Moving_Z(-1, 200);
 
 	// check if we have finished all actions in buffer or not
 	//TODO check if this part will possibly be endless when we are in printing and following commands are sent to Marlin successively
@@ -3035,473 +2701,6 @@ void process_commands()
 				break;
 			}
 
-
-		case 1601: 
-			{// Serial2 cartridge
-
-
-				SERIAL_PROTOCOLLN((int)active_extruder);  
-
-				break;
-			}	
-
-
-		case 1602: 
-			{// Serial2 read cartridge
-
-				//#ifdef TEST
-				//		SERIAL_PROTOCOL("5C1200FF000014C0800000646900ED05");
-
-				//#else
-				if(RFID2_14_15_OK)
-				{
-
-					////Activer l'antenne///
-					if (Antenna_RFID_State== false)
-					{
-						//envoie_commande(Set_Antenna_Status_ON,length_Set_Antenna_Status_ON,2);
-						Antenna_RFID_State= true;
-					}
-					//// fin de l'activation///////////	
-
-					// Ultralight
-
-					//envoie_commande(Initialize_Port,length_Initialize_Port,2);	
-					//envoie_commande(Set_Led_Color_ON,length_Set_Led_Color_ON,2); 
-
-					//unsigned long start = millis();
-
-					envoie_commande(Mifare_Request,length_Mifare_Request,2); 		
-					envoie_commande(Mifare_Anticollision,length_Mifare_Anticollision,2); 
-					envoie_commande(Mifare_Select,length_Mifare_Select,2); 
-					//envoie_commande(Mifare_Authentication24,length_Mifare_Authentication24,2); 
-					envoie_commande(Mifare_Read1,length_Mifare_Read1,2); 
-					envoie_commande(Mifare_Hlta,length_Mifare_Hlta,2); 
-
-					//SERIAL_PROTOCOL("#");
-					//SERIAL_PROTOCOL(millis() - start, DEC);
-					//SERIAL_PROTOCOL("#");
-
-					SERIAL_PROTOCOL("\n"); 
-				}
-				//#endif
-
-				break;
-			}	
-		case 1603: 
-			{// Serial3 read cartridge 
-
-				//#ifdef TEST
-				//		SERIAL_PROTOCOL("5C1200FFFFFF14C08000005C6200ED36");
-				//#else
-				if(RFID1_16_17_OK)
-				{
-					////Activer l'antenne///
-					if (Antenna_RFID_State== false)
-					{						
-						//envoie_commande(Set_Antenna_Status_ON,length_Set_Antenna_Status_ON,3); 						
-						Antenna_RFID_State= true;
-					}		
-					//// fin de l'activation///////////	
-
-
-					// Ultralight
-
-					//envoie_commande(Initialize_Port,length_Initialize_Port,3);	
-					//envoie_commande(Set_Led_Color_ON,length_Set_Led_Color_ON,3); 
-					envoie_commande(Mifare_Request,length_Mifare_Request,3); 		
-					envoie_commande(Mifare_Anticollision,length_Mifare_Anticollision,3); 
-					envoie_commande(Mifare_Select,length_Mifare_Select,3); 
-					//envoie_commande(Mifare_Authentication24,length_Mifare_Authentication24,2); 
-					envoie_commande(Mifare_Read1,length_Mifare_Read1,3);
-					envoie_commande(Mifare_Hlta,length_Mifare_Hlta,3); 
-					SERIAL_PROTOCOL("\n");
-				}
-				//#endif
-
-				break;
-			}
-		case 1604: 
-			{ // loading right cartridge
-				uint8_t original_extruder = active_extruder;
-				float fr_critical = FEEDRATE_CRITICAL_LOADING;
-				float fr_default = FEEDRATE_LOADING;
-				float dstc_second = DISTANCE_LOADING_RIGHT;
-				
-				if (code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_critical = FEEDRATE_CRITICAL_LOADING_PVA;
-					fr_default = FEEDRATE_LOADING_PVA;
-					Is_PVA_E0 = true;
-				}
-				else {
-					Is_PVA_E0 = false;
-				}
-				if (!RFID1_16_17_OK) {
-					dstc_second = DISTANCE_LOADING_LEFT;
-				}
-				
-				SetActiveExtruder(0);
-				extrudemultiply = 100; //DIY force loading extrusion multiply to 100% - PNI
-				allow_cold_extrudes(true);
-				// Commande_cartridge=true;
-				
-				// first move
-				Moving_E(DISTANCE_CRITICAL_LOADING, fr_critical);
-				// second move
-				Moving_E(dstc_second, fr_default);
-				
-				// reinitialization
-				Distance_Filament_E0 = 0;
-				
-				SetActiveExtruder(original_extruder);
-				
-				break;
-			}
-
-		case 1605: 
-			{ // loading left cartridge
-				uint8_t original_extruder = active_extruder;
-				float fr_critical = FEEDRATE_CRITICAL_LOADING;
-				float fr_default = FEEDRATE_LOADING;
-				
-				if (code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_critical = FEEDRATE_CRITICAL_LOADING_PVA;
-					fr_default = FEEDRATE_LOADING_PVA;
-					Is_PVA_E1 = true;
-				}
-				else {
-					Is_PVA_E1 = false;
-				}
-				
-				SetActiveExtruder(1);
-				extrudemultiply = 100; //DIY force loading extrusion multiply to 100% - PNI
-				allow_cold_extrudes(true);
-				// Commande_cartridge=true;
-				
-				// first move
-				Moving_E(DISTANCE_CRITICAL_LOADING, fr_critical);
-				// second move
-				Moving_E(DISTANCE_LOADING_LEFT, fr_default);
-				
-				// reinitialization
-				Distance_Filament_E1 = 0;
-				
-				SetActiveExtruder(original_extruder);
-				
-				break;
-			}
-
-		case 1606: 
-			{ // unloading right cartridge
-				uint8_t orignal_extruder = active_extruder;
-				float fr_p1 = UNLOADING_PART1_FEEDRATE;
-				float fr_p2 = UNLOADING_PART2_FEEDRATE;
-				float fr_p3 = UNLOADING_PART3_FEEDRATE;
-				float dstc_p2 = UNLOADING_PART2_LENGTH_RIGHT;
-				
-				if (code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_p1 = UNLOADING_PART1_FEEDRATE_PVA;
-					fr_p2 = UNLOADING_PART2_FEEDRATE_PVA;
-					fr_p3 = UNLOADING_PART3_FEEDRATE_PVA;
-				}
-				if (!RFID1_16_17_OK) {
-					dstc_p2 = UNLOADING_PART2_LENGTH_LEFT;
-				}
-				
-				SetActiveExtruder(0);
-				allow_cold_extrudes(true);
-				unloading_command = true;
-				
-				// first move
-				Moving_E(-UNLOADING_PART1_LENGTH, fr_p1);
-				// second move
-				Moving_E(-dstc_p2, fr_p2);
-				// third move
-				Moving_E(-UNLOADING_PART3_LENGTH, fr_p3);
-				
-				SetActiveExtruder(orignal_extruder);
-				
-				break;
-			}
-
-		case 1607: 
-			{ // unloading left cartridge
-				uint8_t orignal_extruder = active_extruder;
-				float fr_p1 = UNLOADING_PART1_FEEDRATE;
-				float fr_p2 = UNLOADING_PART2_FEEDRATE;
-				float fr_p3 = UNLOADING_PART3_FEEDRATE;
-				
-				if (code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_p1 = UNLOADING_PART1_FEEDRATE_PVA;
-					fr_p2 = UNLOADING_PART2_FEEDRATE_PVA;
-					fr_p3 = UNLOADING_PART3_FEEDRATE_PVA;
-				}
-				
-				SetActiveExtruder(1);
-				allow_cold_extrudes(true);
-				unloading_command = true;
-				
-				// first move
-				Moving_E(-UNLOADING_PART1_LENGTH, fr_p1);
-				// second move
-				Moving_E(-UNLOADING_PART2_LENGTH_LEFT, fr_p2);
-				// third move
-				Moving_E(-UNLOADING_PART3_LENGTH, fr_p3);
-				
-				SetActiveExtruder(orignal_extruder);
-				
-				break;
-			}
-
-		case 1608: 
-			{// Serial3 cartridge
-				//int FCOOO=0;
-#if (PRIVATE_ENDSTOPS1 > -1)
-				SERIAL_PROTOCOLLN(((READ(PRIVATE_ENDSTOPS1)^E_ENDSTOPS_INVERTING)?"filament":"no filament"));
-#endif
-
-
-
-
-
-				break;
-			}
-
-		case 1609: 
-			{// Serial3 cartridge
-#if (PRIVATE_ENDSTOPS1 > -1)
-				SERIAL_PROTOCOLLN(((READ(PRIVATE_ENDSTOPS2)^E_ENDSTOPS_INVERTING)?"filament":"no filament"));
-#endif
-
-
-
-				break;
-			}
-
-
-		case 1610 : {	// write right RFID
-
-			int Tag_ecriture_int[38];
-			byte Tag_ecriture_final[16]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};						
-			byte commande_ecriture_tag[]={0x0a,0x00,0x00,0x00,0x13,0x02,0x06,0x00,0x00,0x00,0x00};
-			byte length_commande_ecriture_tag = sizeof(commande_ecriture_tag);
-
-			for (int i=6; i<38;i++)
-			{
-				if(bufindw==0)
-					Tag_ecriture_int[i] = int(cmdbuffer[3][i]);
-				else
-					Tag_ecriture_int[i] = int(cmdbuffer[bufindw-1][i]);
-
-				if(Tag_ecriture_int[i]>=48 && Tag_ecriture_int[i]<=57)
-					Tag_ecriture_int[i] = Tag_ecriture_int[i]- 48;
-				if(Tag_ecriture_int[i]>=65 && Tag_ecriture_int[i]<=70)
-					Tag_ecriture_int[i] = Tag_ecriture_int[i] - 55;
-			}
-
-			SERIAL_PROTOCOLLN("\n");
-
-			if(RFID2_14_15_OK) {
-				for (int i=0; i<32; i=i+2) 
-					Tag_ecriture_final[i/2] = byte((Tag_ecriture_int[i+6]*16) + Tag_ecriture_int[i+7]);	
-
-				////Activer l'antenne///
-				if (Antenna_RFID_State== false)
-				{						
-					//envoie_commande(Set_Antenna_Status_ON,length_Set_Antenna_Status_ON,2); 						
-					Antenna_RFID_State= true;
-				}		
-				//// fin de l'activation///////////	
-
-				//unsigned long start = millis();
-
-				envoie_commande(Mifare_Request,length_Mifare_Request,2); 		
-				envoie_commande(Mifare_Anticollision,length_Mifare_Anticollision,2); 
-				envoie_commande(Mifare_Select,length_Mifare_Select,2); 
-				envoie_commande(Mifare_Read1,length_Mifare_Read1,2);
-
-				for (int i=0; i<4;i++)
-				{
-					commande_ecriture_tag[i+7]=Tag_ecriture_final[i];
-				}	
-
-				envoie_commande(commande_ecriture_tag,length_commande_ecriture_tag,2);  
-
-				commande_ecriture_tag[6]=0x07;
-
-				for (int i=4; i<8;i++)
-					commande_ecriture_tag[i+3]=Tag_ecriture_final[i];
-
-				envoie_commande(commande_ecriture_tag,length_commande_ecriture_tag,2); 
-
-				commande_ecriture_tag[6]=0x08;
-
-				for (int i=8; i<12;i++)
-					commande_ecriture_tag[i-1]=Tag_ecriture_final[i]; 
-
-				envoie_commande(commande_ecriture_tag,length_commande_ecriture_tag,2); 
-
-				commande_ecriture_tag[6]=0x09;
-
-				for (int i=12; i<16;i++)
-					commande_ecriture_tag[i-5]=Tag_ecriture_final[i];
-
-				envoie_commande(commande_ecriture_tag,length_commande_ecriture_tag,2); 
-				envoie_commande(Mifare_Hlta,length_Mifare_Hlta,2); 
-			}
-			break;
-					}
-		case 1611 : {	// write left RFID
-
-			int Tag_ecriture_int[38];
-			byte Tag_ecriture_final[16]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};						
-			byte commande_ecriture_tag[]={0x0a,0x00,0x00,0x00,0x13,0x02,0x06,0x00,0x00,0x00,0x00};
-			byte length_commande_ecriture_tag = sizeof(commande_ecriture_tag);
-
-			for (int i=6; i<38;i++)
-			{
-				if(bufindw==0)
-					Tag_ecriture_int[i] = int(cmdbuffer[3][i]);
-				else
-					Tag_ecriture_int[i] = int(cmdbuffer[bufindw-1][i]);
-
-				if(Tag_ecriture_int[i]>=48 && Tag_ecriture_int[i]<=57)
-					Tag_ecriture_int[i] = Tag_ecriture_int[i]- 48;
-				if(Tag_ecriture_int[i]>=65 && Tag_ecriture_int[i]<=70)
-					Tag_ecriture_int[i] = Tag_ecriture_int[i] - 55;
-			}
-
-			SERIAL_PROTOCOLLN("\n");
-
-			if(RFID1_16_17_OK) {
-				for (int i=0; i<32; i=i+2) 
-					Tag_ecriture_final[i/2] = byte((Tag_ecriture_int[i+6]*16) + Tag_ecriture_int[i+7]);	
-
-				////Activer l'antenne///
-				if (Antenna_RFID_State== false)
-				{						
-					//envoie_commande(Set_Antenna_Status_ON,length_Set_Antenna_Status_ON,3); 						
-					Antenna_RFID_State= true;
-				}		
-				//// fin de l'activation///////////	
-
-				envoie_commande(Mifare_Request,length_Mifare_Request,3); 		
-				envoie_commande(Mifare_Anticollision,length_Mifare_Anticollision,3); 
-				envoie_commande(Mifare_Select,length_Mifare_Select,3); 
-				envoie_commande(Mifare_Read1,length_Mifare_Read1,3);
-
-				for (int i=0; i<4;i++)
-				{
-					commande_ecriture_tag[i+7]=Tag_ecriture_final[i];
-				}	
-
-				envoie_commande(commande_ecriture_tag,length_commande_ecriture_tag,3);  
-
-				commande_ecriture_tag[6]=0x07;
-
-				for (int i=4; i<8;i++)
-					commande_ecriture_tag[i+3]=Tag_ecriture_final[i];
-
-				envoie_commande(commande_ecriture_tag,length_commande_ecriture_tag,3); 
-
-				commande_ecriture_tag[6]=0x08;
-
-				for (int i=8; i<12;i++)
-					commande_ecriture_tag[i-1]=Tag_ecriture_final[i];
-
-				envoie_commande(commande_ecriture_tag,length_commande_ecriture_tag,3); 
-
-				commande_ecriture_tag[6]=0x09;
-
-				for (int i=12; i<16;i++)
-					commande_ecriture_tag[i-5]=Tag_ecriture_final[i];
-
-				envoie_commande(commande_ecriture_tag,length_commande_ecriture_tag,3); 
-				envoie_commande(Mifare_Hlta,length_Mifare_Hlta,3); 
-			}
-			break;
-					}
-
-		case 1612: // loading Right Filament which takes as parameter the distance of loading
-			{
-				uint8_t original_extruder = active_extruder;
-				float Distance_Load = 0;
-				float fr_critical = FEEDRATE_CRITICAL_LOADING;
-				float fr_default = FEEDRATE_LOADING;
-				
-				if (code_seen('D')) {
-					Distance_Load = code_value();
-				}
-				
-				if (code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_critical = FEEDRATE_CRITICAL_LOADING_PVA;
-					fr_default = FEEDRATE_LOADING_PVA;
-					Is_PVA_E0 = true;
-				}
-				else {
-					Is_PVA_E0 = false;
-				}
-				
-				SetActiveExtruder(0);
-				extrudemultiply = 100; //DIY force loading extrusion multiply to 100% - PNI
-				allow_cold_extrudes(true);
-				// Commande_cartridge=true;
-				// relative_mode = true;
-				
-				if (Distance_Load < DISTANCE_CRITICAL_LOADING) {
-					Moving_E(Distance_Load, fr_critical);
-				}
-				else {
-					Moving_E(DISTANCE_CRITICAL_LOADING, fr_critical);
-					Moving_E(Distance_Load - DISTANCE_CRITICAL_LOADING, fr_default);
-				}
-				
-				SetActiveExtruder(original_extruder);
-				// relative_mode = false;
-				
-				break;
-			}
-
-		case 1613: 
-			{// loading Left Filament which takes as parameter the distance of loading
-				uint8_t original_extruder = active_extruder;
-				float Distance_Load = 0;
-				float fr_critical = FEEDRATE_CRITICAL_LOADING;
-				float fr_default = FEEDRATE_LOADING;
-				
-				if (code_seen('D')) {
-					Distance_Load = code_value();
-				}
-				
-				if (code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_critical = FEEDRATE_CRITICAL_LOADING_PVA;
-					fr_default = FEEDRATE_LOADING_PVA;
-					Is_PVA_E1 = true;
-				}
-				else {
-					Is_PVA_E1 = false;
-				}
-				
-				SetActiveExtruder(1);
-				extrudemultiply = 100; //DIY force loading extrusion multiply to 100% - PNI
-				allow_cold_extrudes(true);
-				// Commande_cartridge=true;
-				// relative_mode = true;
-				
-				if (Distance_Load < DISTANCE_CRITICAL_LOADING) {
-					Moving_E(Distance_Load, fr_critical);
-				}
-				else {
-					Moving_E(DISTANCE_CRITICAL_LOADING, fr_critical);
-					Moving_E(Distance_Load - DISTANCE_CRITICAL_LOADING, fr_default);
-				}
-				
-				SetActiveExtruder(original_extruder);
-				// relative_mode = false;
-				
-				break;
-			}
-
 		case 1614: 
 			{// Get Strip_Led state 			
 				if (Strip_Led_State== true)
@@ -3524,65 +2723,6 @@ void process_commands()
 
 				break;
 			}
-
-
-		case 1616: 
-			{// Enable antenna's RFID			
-
-
-				//envoie_commande(Initialize_Port,length_Initialize_Port,2);	
-				//envoie_commande(Set_Antenna_Status_ON,length_Set_Antenna_Status_ON,2); 	
-				//envoie_commande(Initialize_Port,length_Initialize_Port,3);	
-				//envoie_commande(Set_Antenna_Status_ON,length_Set_Antenna_Status_ON,3); 	
-				Antenna_RFID_State= true;
-				SERIAL_PROTOCOL("\n");
-
-				break;
-
-
-
-
-
-			}
-
-
-
-		case 1617: 
-			{// Disable antenna's RFID		
-
-
-				//envoie_commande(Initialize_Port,length_Initialize_Port,2);	
-				envoie_commande(Set_Antenna_Status_OFF,length_Set_Antenna_Status_OFF,2); 	
-				//envoie_commande(Initialize_Port,length_Initialize_Port,3);	
-				envoie_commande(Set_Antenna_Status_OFF,length_Set_Antenna_Status_OFF,3); 
-				Antenna_RFID_State= false;	
-				SERIAL_PROTOCOL("\n");
-
-				break;
-
-
-			}
-
-
-		case 1618: 
-			{// Get Antenna_RFID 
-				//#ifdef TEST
-				//					SERIAL_PROTOCOL("1");
-				//#else
-				if (Antenna_RFID_State== true)
-					SERIAL_PROTOCOL("1");
-				else
-					SERIAL_PROTOCOL("0"); 
-				//#endif
-				break;
-			}
-
-
-
-
-
-			// Fontions vitesse Peng
-
 
 
 		case 1620: 
@@ -3637,104 +2777,11 @@ void process_commands()
 				break;
 			}
 
-
-		case 1625:
-		{
-			if (RFID1_16_17_OK) {
-				SERIAL_PROTOCOL("1");
-			}
-			else {
-				SERIAL_PROTOCOL("-1");
-			}
-			break;
-		}
-
-
 		case 1626:
 		{
 			SERIAL_PROTOCOL_F(degBed(),1); 
 			break;
 		}
-
-		//====== extrude and retract filament ======
-
-		case 1650: 
-			{// Extruding 20mm for the first extruder
-				uint8_t original_extruder = active_extruder;
-				float fr_charge = FEEDRATE_EXTRUDE_RETRACT;
-				
-				SetActiveExtruder(0);
-				if(code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_charge = FEEDRATE_EXTRUDE_RETRACT_PVA;
-					Is_PVA_E0 = true;
-				}
-				else {
-					Is_PVA_E0 = false;
-				}
-				
-				Moving_E(DISTANCE_EXTRUDE_RETRACT, fr_charge);
-				
-				SetActiveExtruder(original_extruder);
-				
-				break;
-			}
-
-		case 1651: 
-			{// Extruding 20mm for the second extruder
-				uint8_t original_extruder = active_extruder;
-				float fr_charge = FEEDRATE_EXTRUDE_RETRACT;
-				
-				SetActiveExtruder(1);
-				if(code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_charge = FEEDRATE_EXTRUDE_RETRACT_PVA;
-					Is_PVA_E1 = true;
-				}
-				else {
-					Is_PVA_E1 = false;
-				}
-				
-				Moving_E(DISTANCE_EXTRUDE_RETRACT, fr_charge);
-				
-				SetActiveExtruder(original_extruder);
-				
-				break;
-			}
-
-		case 1652: 
-			{// Reversing 20mm for the first extruder, not in use in real
-				uint8_t original_extruder = active_extruder;
-				float fr_retract = FEEDRATE_EXTRUDE_RETRACT;
-				
-				SetActiveExtruder(0);
-				if(code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_retract = FEEDRATE_EXTRUDE_RETRACT_PVA;
-				}
-				
-				Moving_E(-DISTANCE_EXTRUDE_RETRACT, fr_retract);
-				
-				SetActiveExtruder(original_extruder);
-				
-				break;
-			}
-
-		case 1653: 
-			{// Reversing 20mm for the second extruder, not in use in real
-				uint8_t original_extruder = active_extruder;
-				float fr_retract = FEEDRATE_EXTRUDE_RETRACT;
-				
-				SetActiveExtruder(1);
-				if(code_seen(CODE_PVA_IN_LOADING_UNLOADING)) {
-					fr_retract = FEEDRATE_EXTRUDE_RETRACT_PVA;
-				}
-				
-				Moving_E(-DISTANCE_EXTRUDE_RETRACT, fr_retract);
-				
-				SetActiveExtruder(original_extruder);
-				
-				break;
-			}
-
-			//====== offset system ======
 
 		case 1660: 
 			{
@@ -3890,46 +2937,6 @@ void process_commands()
 			}//DIY end - PNI
 
 
-		case 1900: 
-			{// Interruption of programme
-				quickStop(); 
-				Message_wait();
-
-				// here I re-add the parts of development (just translation - PNI)
-				int nb_check = 50 * 60 / homing_feedrate[Z_AXIS];
-				
-				Moving_Z(50, homing_feedrate[Z_AXIS]);
-				//delay(15000);
-				for (int i = 1; i < nb_check; i++) { // let 1s in moving to write RFID (if possible)
-					if (READ(Z_MAX_PIN)^Z_ENDSTOPS_INVERTING) {
-						break;
-					}
-					delay(1000);
-				}
-				Message_wait();
-				Write_RFID1();
-				Write_RFID2();
-				Reverse_20mm();
-				Message_wait();
-				st_synchronize();
-				Message_wait();
-				Reinitialize_E0_E1_Quantity(true);
-				Message_wait();
-				// Homing_head();
-				Center_head();
-				Message_wait();
-				Set_temperature_to_0Degree();
-				Message_wait();
-				// parts of development end
-
-				disable_e0();
-				disable_e1();
-				disable_e2();
-				fanSpeed = 0;
-
-				break;
-			}
-
 		case 1901: 
 			{// Flush
 				quickStop2();
@@ -3937,114 +2944,6 @@ void process_commands()
 				break;
 			}
 
-
-		case 1902: 
-			{// Pause
-				// disable the write of RFID to make it stable (so also the reinitialisation)
-				Saving_current_parameters();
-				Message_wait();
-				
-				// move down platform first
-				int nb_check = 50 * 60 / homing_feedrate[Z_AXIS];
-				Moving_Z(50, homing_feedrate[Z_AXIS]);
-				//delay(15000);
-				for (int i = 1; i < nb_check; i++) { // let 1s in moving to write RFID (if possible)
-					if (READ(Z_MAX_PIN)^Z_ENDSTOPS_INVERTING) {
-						break;
-					}
-					delay(1000);
-				}
-				Message_wait();
-				
-				Write_RFID1();
-				Write_RFID2();
-				Message_wait();
-				Reverse_20mm();
-				// SERIAL_PROTOCOL_F(Distance_Filament_E0,1);
-				// SERIAL_PROTOCOL_F(Distance_Filament_E1,1);
-				st_synchronize();
-				Message_wait();
-				Reinitialize_E0_E1_Quantity(true);
-				Has_Paused_in_Print = true; // assign pause global variable after initialization
-				// Message_wait();
-				Homing_head();
-				Message_wait();
-				// Return_current_parameters();
-				Set_temperature_to_0Degree();
-				Message_wait();
-
-				disable_e0();
-				disable_e1();
-				disable_e2();
-
-				break;
-			}	
-
-		case 1903 : 
-			{
-				// ranged the alignment and fixed bugs (by PNI on 20140708)
-				// - Always extrude 2 filaments even when printing in 1 color
-				// - Reset target temperatures in resume
-				// - Improve to heat 2 nozzle in the same time when printing in 2 colors
-				bool resume_E0 = (Pause_current_position[T0_parm] > 0); // use EXTRUDE_MINTEMP?
-				bool resume_E1 = (Pause_current_position[T1_parm] > 0); // use EXTRUDE_MINTEMP?
-				
-				if (resume_E0 == true) {
-					setTargetHotend(Pause_current_position[T0_parm], 0);
-					TMP0_Target = Pause_current_position[T0_parm];
-				}
-				if (resume_E1 == true) {
-					setTargetHotend(Pause_current_position[T1_parm], 1);
-					TMP1_Target = Pause_current_position[T1_parm];
-				}
-				if (Pause_current_position[Bed_parm] > 0) {
-					setTargetBed(Pause_current_position[Bed_parm]);
-				}
-				// Set_current_paramters();
-				
-				// resume head first
-				MovingTo_head(Pause_current_position[X_AXIS], Pause_current_position[Y_AXIS], homing_feedrate[X_AXIS]); // X_AXIS value equals Y_AXIS one
-				Message_wait();
-				
-				// start to wait temperature
-				if (resume_E0 == true) {
-					Set_to_Temperature_in_Resume(0, Pause_current_position[T0_parm]);
-				}
-				if (resume_E1 == true) {
-					Set_to_Temperature_in_Resume(1, Pause_current_position[T1_parm]);
-				}
-				Message_wait();
-				
-				// extrude for compensation of retraction
-				Extrude_20mm_in_Resume(resume_E0, resume_E1);
-				st_synchronize();
-				Message_wait();
-				
-				// resume platform at last
-				MovingTo_Z(Pause_current_position[Z_AXIS], homing_feedrate[Z_AXIS]);
-				Message_wait();
-				
-				break;
-			}
-
-		case 1904: 
-			{// Motionless end.
-				Write_RFID1();
-				Write_RFID2();
-				Reverse_20mm();
-				Message_wait();
-				st_synchronize();
-				Message_wait();
-				Reinitialize_E0_E1_Quantity(true);
-				Message_wait();
-				// Set_temperature_to_0Degree();
-				// Message_wait();
-				disable_e0();
-				disable_e1();
-				disable_e2();
-				fanSpeed = 0;
-				break;
-			}
 		case 1905: 
 			{// Plateform rise.
 				// first move to down platform
@@ -4065,20 +2964,8 @@ void process_commands()
 				break;
 			}
 
-		case 1907:
-			{ // return consumption quantities saved in printer
-				SERIAL_PROTOCOL("E0:");
-				SERIAL_PROTOCOL(Distance_Consumption_E0);
-				SERIAL_PROTOCOL("\nE1:");
-				SERIAL_PROTOCOL(Distance_Consumption_E1);
-				
-				break;
-			}
-
 		case 2000:
 			{// Begin printing
-				Has_Paused_in_Print = false;
-				Reinitialize_E0_E1_Quantity(false);
 				// If only one extruder is needed
 				Set_temperature_to_0Degree();
 				// reset extruder to avoid wrong temperature assignment in mono-color model - PNI
@@ -4092,39 +2979,7 @@ void process_commands()
 				
 				break;
 			}
-		case 2001: 
-			{// End
 
-				int nb_check = 150 * 60 / homing_feedrate[Z_AXIS];
-				Moving_Z(150, homing_feedrate[Z_AXIS]);
-				//delay(30000);
-				for (int i = 1; i < nb_check; i++) { // let 1s in moving to write RFID (if possible)
-					if (READ(Z_MAX_PIN)^Z_ENDSTOPS_INVERTING) {
-						break;
-					}
-					delay(1000);
-				}
-				Message_wait();
-				Write_RFID1();
-				Write_RFID2();
-				Reverse_20mm();
-				Message_wait();
-				st_synchronize();
-				Message_wait();
-				Reinitialize_E0_E1_Quantity(true);
-				Message_wait();
-				// Homing_head();
-				Center_head();
-				Message_wait();
-				Set_temperature_to_0Degree();
-				Message_wait();
-				disable_e0();
-				disable_e1();
-				disable_e2();
-				fanSpeed = 0;
-
-				break;
-			}
 		case 2002: 
 			{// kill function
 
@@ -4366,16 +3221,6 @@ void prepare_move()
 {
 	clamp_to_software_endstops(destination);
 
-	if(active_extruder==0)
-	{
-		Distance_Filament_E0 = Distance_Filament_E0 + destination[E_AXIS]-current_position[E_AXIS];
-	}
-
-	if(active_extruder==1)
-	{
-		Distance_Filament_E1 = Distance_Filament_E1 + destination[E_AXIS]-current_position[E_AXIS];
-	}
-
 	previous_millis_cmd = millis(); 
 	// Do not use feedmultiply for E or Z only moves
 	if( (current_position[X_AXIS] == destination [X_AXIS]) && (current_position[Y_AXIS] == destination [Y_AXIS])) {
@@ -4570,10 +3415,6 @@ void manage_inactivity() {
 				//SERIAL_ECHOLNPGM("\n LOW POWER SUPPLY\n");
 #ifdef LOW_POWER_STANDBY
 				if ((degHotend(0) > EXTRUDE_MINTEMP) || (degHotend(1) > EXTRUDE_MINTEMP)) {
-					// Write_RFID1();
-					// Write_RFID2();
-					Reverse_20mm();
-					Reinitialize_E0_E1_Quantity(false);
 					Moving_Z(150, homing_feedrate[Z_AXIS]);
 					Homing_head();
 					Set_temperature_to_0Degree();

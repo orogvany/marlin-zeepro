@@ -9,7 +9,7 @@
 //Implementation of an idea by Prof Braino to inform user that any changes made
 //to this build by the user have been successfully uploaded into firmware.
 #define STRING_VERSION_CONFIG_H __DATE__ " " __TIME__ // build date and time
-#define STRING_CONFIG_H_AUTHOR "(MMC, Zim_Board_v6)" //Who made the changes.
+#define STRING_CONFIG_H_AUTHOR "(JPod, Zim_Board_v6)" //Who made the changes.
 
 // SERIAL_PORT selects which serial port should be used for communication with the host.
 // This allows the connection of wireless adapters (for instance) to non-default port pins.
@@ -19,10 +19,6 @@
 // This determines the communication speed of the printer
 #define BAUDRATE 250000
 
-
-/////RFID Module
-//#define BAUDRATE_RFID 115200
-#define BAUDRATE_RFID 19200
 
 //// The following define selects which electronics board you have. Please choose the one that matches your setup
 // 10 = Gen7 custom (Alfons3 Version) "https://github.com/Alfons3/Generation_7_Electronics"
@@ -266,12 +262,6 @@
 #define LOW_POWER_STANDBY
 
 
-// Fonction pour desactiver les RFID automatiquement!!
-#define Auto_Desable_RFID
-
-
-
-
 
 
 // Fonction Pour le mouvement de palpation de Z
@@ -471,12 +461,6 @@ axis steps = nombre de micro pas pour faire un mm = 6400/30 = 213
 //#define ULTRA_LCD  //general lcd support, also 16x2
 //#define DOGLCD	// Support for SPI LCD 128x64 (Controller ST7565R graphic Display Family)
 #define SDSUPPORT // Enable SD Card Support in Hardware Console
-
-#define RFIDSUPPORT // Enable RFID!!
-
-//#define RFID_SL032 // Define type of RFID : Stronglink SL032
-#define RFID_ZIM
-
 
 //#define ULTIMAKERCONTROLLER //as available from the ultimaker online store.
 //#define ULTIPANEL  //the ultipanel as on thingiverse
