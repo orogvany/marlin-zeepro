@@ -1702,6 +1702,12 @@ void process_commands()
                       SERIAL_PROTOCOLPGM(" /");
                       SERIAL_PROTOCOL_F(degTargetHotend(cur_extruder),1);
             }
+#if TEMP_BED_PIN > -1
+            SERIAL_PROTOCOLPGM(" B:");  
+            SERIAL_PROTOCOL_F(degBed(),1);
+            SERIAL_PROTOCOLPGM(" /");
+            SERIAL_PROTOCOL_F(degTargetBed(),1);
+#endif //TEMP_BED_PIN
             SERIAL_PROTOCOLLN("");
 						codenum = millis();
 					}
