@@ -766,24 +766,15 @@ ISR(TIMER1_COMPA_vect)
 			current_block = NULL;
 			plan_discard_current_block();
 			allow_cold_extrudes(false);
-
-
-
-
-			////// ça c'est pour les commande 1606 et 1607
-			//if((unloading_command==true)&&(unloading_critical_state == true))
-			//{
-			//	comptage--;
-			//}
-
-			//if((unloading_command==true)&&(unloading_critical_state == true)&&(comptage==0))
-			//{
-			//	comptage = 1;
-			//	unloading_critical_state = false; 
-			//	unloading_command = false;
-			//}
 		}   
-	} 
+	}
+
+  // Minimize gaps in timing to a single step. "... at high step rates, the length of time it takes to 
+  // run the bulk of the interrupt handler is overrunning the compare value (OCR1A) set towards the end of the ISR.
+  // When this happens, it has to go one through one whole overflow and back again before it triggers the next interrupt.
+  // Google "OCR1A race condition" for MakerGear post on details. This appears to be a race condition in Marlin firmware 
+  // introduced in a newer compiler version
+  if (TCNT1 >= OCR1A) TCNT1 = 0; 
 }
 
 

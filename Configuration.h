@@ -129,23 +129,17 @@
   #define K1 0.95 //smoothing factor withing the PID
   #define PID_dT ((16.0 * 8.0)/(F_CPU / 64.0 / 256.0)) //sampling period of the temperature routine
 
+
 // If you are using a preconfigured hotend then you can use one of the value sets by uncommenting it
-
+// Zeepro Zim
     #define  DEFAULT_Kp 40
-    #define  DEFAULT_Ki 4  
-    #define  DEFAULT_Kd 95  
-
+    #define  DEFAULT_Ki 4
+    #define  DEFAULT_Kd 95
 
 //Second Extruder parameters
-
     #define  DEFAULT_Kp2 40
-    #define  DEFAULT_Ki2 4 
-    #define  DEFAULT_Kd2 95  
-
-
-
-
-
+    #define  DEFAULT_Ki2 4
+    #define  DEFAULT_Kd2 95
 
 // Makergear
 //    #define  DEFAULT_Kp 7.0
@@ -308,29 +302,20 @@
 #define DISTANCE_LOADING_LEFT			1440	//mm
 #define DISTANCE_LOADING_RIGHT			1240	//mm
 #define FEEDRATE_LOADING				1000	//mm
-#define FEEDRATE_LOADING_PVA			500		//mm/mn
 #define DISTANCE_CRITICAL_LOADING		50		//mm
 #define FEEDRATE_CRITICAL_LOADING		500		//mm/mn
-#define FEEDRATE_CRITICAL_LOADING_PVA	100		//mm/mn
 #define FEEDRATE_EXTRUDE_RETRACT		1000	//mm/mn
-#define FEEDRATE_EXTRUDE_RETRACT_PVA	50		//mm/mn
-
 #define DISTANCE_EXTRUDE_RETRACT	4
 
 //Unloading
 
 #define UNLOADING_PART1_LENGTH			100		// mm
 #define UNLOADING_PART1_FEEDRATE		2000	// mm/mn
-#define UNLOADING_PART1_FEEDRATE_PVA	500		// mm/mn
 #define UNLOADING_PART2_LENGTH_LEFT		1330	// mm
 #define UNLOADING_PART2_LENGTH_RIGHT	1130	// mm
 #define UNLOADING_PART2_FEEDRATE		1000	// mm/mn
-#define UNLOADING_PART2_FEEDRATE_PVA	500		// mm/mn
 #define UNLOADING_PART3_LENGTH			500		// mm
 #define UNLOADING_PART3_FEEDRATE		1000	// mm/mn
-#define UNLOADING_PART3_FEEDRATE_PVA	500		// mm/mn
-
-#define CODE_PVA_IN_LOADING_UNLOADING	'P'
 
 // The pullups are needed if you directly connect a mechanical endswitch between the signal and ground pins.
 #define X_ENDSTOPS_INVERTING			false // set to true to invert the logic of the endstops.
@@ -452,7 +437,7 @@ axis steps = nombre de micro pas pour faire un mm = 6400/30 = 213
 // M501 - reads parameters from EEPROM (if you need reset them after you changed them temporarily).  
 // M502 - reverts to the default "factory settings".  You still need to store them in EEPROM afterwards if you want to.
 //define this to enable eeprom support
-//#define EEPROM_SETTINGS
+#define EEPROM_SETTINGS
 //to disable EEPROM Serial responses and decrease program space by ~1700 byte: comment this out:
 // please keep turned on if you can.
 //#define EEPROM_CHITCHAT

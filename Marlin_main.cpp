@@ -45,7 +45,7 @@ http://reprap.org/pipermail/reprap-dev/2011-May/003323.html
 #include <SPI.h>
 #endif
 
-#define VERSION_STRING  "1.1.0.17"
+#define VERSION_STRING  "1.1.0.18"
 
 //Stepper Movement Variables
 
@@ -174,6 +174,11 @@ bool premier_transport = true;
 
 //////////////////////// FIN fonction voyage //////////////////////////////////////////
 
+float Distance_Filament_E0 = 0;
+float Distance_Filament_E1 = 0;
+float Distance_Consumption_E0 = 0;
+float Distance_Consumption_E1 = 0;
+bool Has_Paused_in_Print = false;
 
 ///////////////////////////Fonction pour les deux thermistance/////////////////
 
@@ -899,6 +904,27 @@ FORCE_INLINE void Center_head() {
 	return;
 }
 
+void Reverse_20mm() {
+  float fr_retract = FEEDRATE_EXTRUDE_RETRACT;
+  uint8_t original_extruder = active_extruder;
+  
+  // first extruder
+  if(Distance_Filament_E0 > 0) {
+    SetActiveExtruder(0);  
+    Moving_E(-DISTANCE_EXTRUDE_RETRACT, fr_retract);
+  }
+  
+  // second extruder
+  if(Distance_Filament_E1 > 0) {
+    SetActiveExtruder(1);
+    fr_retract = FEEDRATE_EXTRUDE_RETRACT;
+    Moving_E(-DISTANCE_EXTRUDE_RETRACT, fr_retract);
+  }
+  
+  SetActiveExtruder(original_extruder);  
+  return;
+}
+
 void Homing_head() {
 	// Homing
 	HOMEAXIS(X);
@@ -1028,6 +1054,24 @@ void Read_offset_E2PROM() {
 }
 
 
+void Reinitialize_E0_E1_Quantity(bool assign_consumption) {
+  if (assign_consumption == true) {
+    // assign old quantity as consumption
+    if (Has_Paused_in_Print == true) {
+      Distance_Consumption_E0 += Distance_Filament_E0;
+      Distance_Consumption_E1 += Distance_Filament_E1;
+    }
+    else {
+      Distance_Consumption_E0 = Distance_Filament_E0;
+      Distance_Consumption_E1 = Distance_Filament_E1;
+    }
+  }
+  
+  Distance_Filament_E0 = 0;
+  Distance_Filament_E1 = 0;
+  
+  return;
+}
 
 
 
@@ -1135,9 +1179,35 @@ void Set_to_Temperature_in_Resume(uint8_t extruder_set, float temper_set) {
 	return;
 }
 
+void Extrude_20mm_in_Resume(bool extrude_e0, bool extrude_e1) {
+  float fr_extrude = FEEDRATE_EXTRUDE_RETRACT;
+  uint8_t original_extruder = active_extruder;
+  
+  // first extruder
+  if (extrude_e0 == true) {
+    SetActiveExtruder(0);
+    Moving_E(DISTANCE_EXTRUDE_RETRACT, fr_extrude);
+  }
+  
+  // second extruder
+  if (extrude_e1 == true) {
+    SetActiveExtruder(1);
+    fr_extrude = FEEDRATE_EXTRUDE_RETRACT;
+    Moving_E(DISTANCE_EXTRUDE_RETRACT, fr_extrude);
+  }
+  
+  SetActiveExtruder(original_extruder);
+  return;
+}
+
 void kill_Zim() {
 	SERIAL_PROTOCOL("\nShutting down the Zim\n");
 	quickStop();
+
+  if ((Distance_Filament_E0 > 0) || (Distance_Filament_E1 > 0)) {
+    Moving_Z(11, 200); // perhaps for power off in printing
+    Reverse_20mm();
+  }
 
 	disable_heater();
 
@@ -1150,15 +1220,15 @@ void kill_Zim() {
 		delay(250);
 	}
 
-	// 2 blinks of LED
-	digitalWrite(Commande_Green, HIGH);   // turn the LED on (HIGH is the voltage level)
-	delay(100);
-	digitalWrite(Commande_Green, LOW);    // turn the LED off by making the voltage LOW
-	delay(100);
-	digitalWrite(Commande_Green, HIGH);   // turn the LED on (HIGH is the voltage level)
-	delay(100);
-	digitalWrite(Commande_Green, LOW);    // turn the LED off by making the voltage LOW
-	delay(100);
+	// 4 blinks of LED
+  static const int LED_BLINKS = 4;
+  for(int i=0; i<LED_BLINKS; ++i)
+  {
+	  digitalWrite(Commande_Green, HIGH);   // turn the LED on (HIGH is the voltage level)
+	  delay(50);
+  	digitalWrite(Commande_Green, LOW);    // turn the LED off by making the voltage LOW
+	  delay(50);
+  }
 
 	disable_x();
 	disable_y();
@@ -2949,6 +3019,106 @@ void process_commands()
 
 				break;
 			}
+    case 1902: 
+      { // Pause
+        // disable the write of RFID to make it stable (so also the reinitialisation)
+        Saving_current_parameters();
+        Message_wait();
+        
+        // move down platform first
+        int nb_check = 50 * 60 / homing_feedrate[Z_AXIS];
+        Moving_Z(50, homing_feedrate[Z_AXIS]);
+        //delay(15000);
+        for (int i = 1; i < nb_check; i++) { // let 1s in moving to write RFID (if possible)
+          if (READ(Z_MAX_PIN)^Z_ENDSTOPS_INVERTING) {
+            break;
+          }
+          delay(1000);
+        }
+        Message_wait();
+        Reverse_20mm();
+        // SERIAL_PROTOCOL_F(Distance_Filament_E0,1);
+        // SERIAL_PROTOCOL_F(Distance_Filament_E1,1);
+        st_synchronize();
+        Message_wait();
+        Reinitialize_E0_E1_Quantity(true);
+        Has_Paused_in_Print = true; // assign pause global variable after initialization
+        // Message_wait();
+        Homing_head();
+        Message_wait();
+        // Return_current_parameters();
+        Set_temperature_to_0Degree();
+        Message_wait();
+
+        disable_e0();
+        disable_e1();
+        disable_e2();
+
+        break;
+      }      
+    case 1903 : 
+      {
+        // ranged the alignment and fixed bugs (by PNI on 20140708)
+        // - Always extrude 2 filaments even when printing in 1 color
+        // - Reset target temperatures in resume
+        // - Improve to heat 2 nozzle in the same time when printing in 2 colors
+        bool resume_E0 = (Pause_current_position[T0_parm] > 0); // use EXTRUDE_MINTEMP?
+        bool resume_E1 = (Pause_current_position[T1_parm] > 0); // use EXTRUDE_MINTEMP?
+        
+        if (resume_E0 == true) {
+          setTargetHotend(Pause_current_position[T0_parm], 0);
+          TMP0_Target = Pause_current_position[T0_parm];
+        }
+        if (resume_E1 == true) {
+          setTargetHotend(Pause_current_position[T1_parm], 1);
+          TMP1_Target = Pause_current_position[T1_parm];
+        }
+        if (Pause_current_position[Bed_parm] > 0) {
+          setTargetBed(Pause_current_position[Bed_parm]);
+        }
+        // Set_current_paramters();
+        
+        // resume head first
+        MovingTo_head(Pause_current_position[X_AXIS], Pause_current_position[Y_AXIS], homing_feedrate[X_AXIS]); // X_AXIS value equals Y_AXIS one
+        Message_wait();
+        
+        // start to wait temperature
+        if (resume_E0 == true) {
+          Set_to_Temperature_in_Resume(0, Pause_current_position[T0_parm]);
+        }
+        if (resume_E1 == true) {
+          Set_to_Temperature_in_Resume(1, Pause_current_position[T1_parm]);
+        }
+        Message_wait();
+        
+        // extrude for compensation of retraction
+        Extrude_20mm_in_Resume(resume_E0, resume_E1);
+        st_synchronize();
+        Message_wait();
+        
+        // resume platform at last
+        MovingTo_Z(Pause_current_position[Z_AXIS], homing_feedrate[Z_AXIS]);
+        Message_wait();
+        
+        break;
+      }
+
+    case 1904: 
+      {// Motionless end.
+        Reverse_20mm();
+        Message_wait();
+        st_synchronize();
+        Message_wait();
+        Reinitialize_E0_E1_Quantity(true);
+        Message_wait();
+        // Set_temperature_to_0Degree();
+        // Message_wait();
+        disable_e0();
+        disable_e1();
+        disable_e2();
+        fanSpeed = 0;
+        break;
+      }     
 
 		case 1905: 
 			{// Plateform rise.
@@ -2970,8 +3140,16 @@ void process_commands()
 				break;
 			}
 
+    case 1907:
+      { // return consumption quantities saved in printer
+        SERIAL_PROTOCOL("RFID Not Installed");      
+        break;
+      }     
+
 		case 2000:
-			{// Begin printing
+			{ // Begin printing
+			  Has_Paused_in_Print = false;
+			  Reinitialize_E0_E1_Quantity(false);
 				// If only one extruder is needed
 				Set_temperature_to_0Degree();
 				// reset extruder to avoid wrong temperature assignment in mono-color model - PNI
@@ -2986,26 +3164,41 @@ void process_commands()
 				break;
 			}
 
+    case 2001: 
+      { // End printing
+        int nb_check = 150 * 60 / homing_feedrate[Z_AXIS];
+        Moving_Z(150, homing_feedrate[Z_AXIS]);
+        Message_wait();
+        Reverse_20mm();
+        Message_wait();
+        st_synchronize();
+        Message_wait();
+        SERIAL_PROTOCOL("Filament Used Right:");
+        SERIAL_PROTOCOL_F(Distance_Filament_E0,1);
+        SERIAL_PROTOCOL("mm  Left:");
+        SERIAL_PROTOCOL_F(Distance_Filament_E1,1);
+        SERIAL_PROTOCOL("mm\n");
+        Reinitialize_E0_E1_Quantity(true);
+        Message_wait();
+        // Homing_head();
+        Center_head();
+        Message_wait();
+        Set_temperature_to_0Degree();
+        Message_wait();
+        disable_e0();
+        disable_e1();
+        disable_e2();
+        fanSpeed = 0;
+        break;
+      }     
+
 		case 2002: 
-			{// kill function
-
+			{ // Shutdown function
 				kill_Zim();
-
 				break;
 			}
 
-			/*
-			case 2010:
-			{// Desactiver l'interruption
-			Desactiver_interruption=true;
-			}
-			case 2011:
-			{//Activer l'interruption
-			Desactiver_interruption=false;
-			}
-			*/
-
-		case 9000: 
+  	case 9000: 
 			{// Voyage function
 
 				Moving_X_Y_Z_Voyage();
@@ -3226,6 +3419,16 @@ void clamp_to_software_endstops(float target[3])
 void prepare_move()
 {
 	clamp_to_software_endstops(destination);
+
+  if(active_extruder==0)
+  {
+    Distance_Filament_E0 = Distance_Filament_E0 + destination[E_AXIS]-current_position[E_AXIS];
+  }
+
+  if(active_extruder==1)
+  {
+    Distance_Filament_E1 = Distance_Filament_E1 + destination[E_AXIS]-current_position[E_AXIS];
+  }  
 
 	previous_millis_cmd = millis(); 
 	// Do not use feedmultiply for E or Z only moves
