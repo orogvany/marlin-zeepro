@@ -170,8 +170,8 @@
 #define DEFAULT_STEPPER_DEACTIVE_TIME 300
 #define DEFAULT_EXTRUDER_DEACTIVE_TIME 60
 
-//default Pushing time to stop the Machine "in Second"
-#define MAX_TIME_PUSHING 2
+//default Time required to hold button prior to shutting down the machine
+#define MAX_TIME_PUSHING_MS 500
 
 
 //default LOW POWER STANDBY if idle

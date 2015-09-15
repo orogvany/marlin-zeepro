@@ -45,7 +45,7 @@ http://reprap.org/pipermail/reprap-dev/2011-May/003323.html
 #include <SPI.h>
 #endif
 
-#define VERSION_STRING  "1.1.0.18"
+#define VERSION_STRING  "1.1.0.19"
 
 //Stepper Movement Variables
 
@@ -147,7 +147,7 @@ static unsigned long max_inactive_time = 0;
 static unsigned long stepper_inactive_time = DEFAULT_STEPPER_DEACTIVE_TIME * 1000l;
 static unsigned long extruder_inactive_time = DEFAULT_EXTRUDER_DEACTIVE_TIME * 1000l;
 
-static unsigned long max_time_pushing = MAX_TIME_PUSHING * 1000;
+static unsigned long max_time_pushing = MAX_TIME_PUSHING_MS;
 
 unsigned long starttime=0;
 unsigned long stoptime=0;
@@ -1667,6 +1667,7 @@ void process_commands()
 			if(setTargetedHotend(105)){
 				break;
 			}
+
 #if (TEMP_0_PIN > -1)
 			SERIAL_PROTOCOLPGM("ok T:");
 			SERIAL_PROTOCOL_F(degHotend(tmp_extruder),1); 
@@ -1748,9 +1749,11 @@ void process_commands()
 #endif //TEMP_RESIDENCY_TIME
 					if( (millis() - codenum) > 1000UL )
 					{ //Print Temp Reading and remaining time every 1 second while heating up/cooling down
-						SERIAL_PROTOCOLPGM("T:");
-						SERIAL_PROTOCOL_F(degHotend(tmp_extruder),1); 
-						SERIAL_PROTOCOLPGM(" E:");
+            
+            // Active extruder temperature causes OctoPrint issues with T1.
+						//SERIAL_PROTOCOLPGM("T:");
+						//SERIAL_PROTOCOL_F(degHotend(tmp_extruder),1);          
+						SERIAL_PROTOCOLPGM("E:");
 						SERIAL_PROTOCOL((int)tmp_extruder); 
 #ifdef TEMP_RESIDENCY_TIME
 						SERIAL_PROTOCOLPGM(" W:");
