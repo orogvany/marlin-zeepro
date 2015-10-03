@@ -401,7 +401,7 @@ axis steps = nombre de micro pas pour faire un mm = 6400/30 = 213
 // default settings 
 
 
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {201,201,3200,290}  
+#define DEFAULT_AXIS_STEPS_PER_UNIT   {201,201,3200,316} // extruder (last parameter) was 290  
 #define DEFAULT_MAX_FEEDRATE          {1000, 1000, 100, 1000}    // (mm/sec)    
 #define DEFAULT_MAX_ACCELERATION      {9000,9000,100,10000}     // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 
@@ -440,7 +440,7 @@ axis steps = nombre de micro pas pour faire un mm = 6400/30 = 213
 #define EEPROM_SETTINGS
 //to disable EEPROM Serial responses and decrease program space by ~1700 byte: comment this out:
 // please keep turned on if you can.
-//#define EEPROM_CHITCHAT
+#define EEPROM_CHITCHAT
 
 //LCD and SD support
 //#define ULTRA_LCD  //general lcd support, also 16x2

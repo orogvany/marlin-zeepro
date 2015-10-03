@@ -45,7 +45,7 @@ http://reprap.org/pipermail/reprap-dev/2011-May/003323.html
 #include <SPI.h>
 #endif
 
-#define VERSION_STRING  "1.1.0.19"
+#define VERSION_STRING  "1.1.0.20"
 
 //Stepper Movement Variables
 
