@@ -45,7 +45,7 @@ http://reprap.org/pipermail/reprap-dev/2011-May/003323.html
 #include <SPI.h>
 #endif
 
-#define VERSION_STRING  "1.1.0.20"
+#define VERSION_STRING  "1.1.0.22"
 
 //Stepper Movement Variables
 
@@ -134,15 +134,9 @@ const int sensitive_pins[] = SENSITIVE_PINS; // Sensitive pin list for M42
 //Inactivity shutdown variables
 static unsigned long previous_millis_cmd = 0;
 
-
 // The two variable for the button
 static unsigned long Read_button_1 = 0;
 static unsigned long Read_button_2 = 0; 
-
-
-
-
-
 static unsigned long max_inactive_time = 0;
 static unsigned long stepper_inactive_time = DEFAULT_STEPPER_DEACTIVE_TIME * 1000l;
 static unsigned long extruder_inactive_time = DEFAULT_EXTRUDER_DEACTIVE_TIME * 1000l;
@@ -1667,41 +1661,42 @@ void process_commands()
 			if(setTargetedHotend(105)){
 				break;
 			}
+			/**
+			 * If we run on the cubieboard, long M105 responses can hang the transmission with octoprint.
+			 * This is silly, but let's change the output format away from spec to shorten it
+			 * specifically to work with octoprint, and report both extruders
+			 * from:    ok T:199.6 E:1 W:8 T0:36.2 /0.0 T1:199.6 /200.0 B:0.0 /0.0
+			 * to:      ok T0:36/0 T1:199/200 B:0/0
+			 * Decimal point for targets are superfluous, and for readings, are unlikely to be of much use
+			 * for a hobby level machine, and a call meant for drawing on a graph.
+			 **/
 
-#if (TEMP_0_PIN > -1)
-			SERIAL_PROTOCOLPGM("ok T:");
-			SERIAL_PROTOCOL_F(degHotend(tmp_extruder),1); 
-			SERIAL_PROTOCOLPGM(" /");
-			SERIAL_PROTOCOL_F(degTargetHotend(tmp_extruder),1); 
-#if TEMP_BED_PIN > -1
-			SERIAL_PROTOCOLPGM(" B:");  
-			SERIAL_PROTOCOL_F(degBed(),1);
-			SERIAL_PROTOCOLPGM(" /");
-			SERIAL_PROTOCOL_F(degTargetBed(),1);
-#endif //TEMP_BED_PIN
-        for (int8_t cur_extruder = 0; cur_extruder < EXTRUDERS; ++cur_extruder) {
-          SERIAL_PROTOCOLPGM(" T");
-          SERIAL_PROTOCOL(cur_extruder);
-          SERIAL_PROTOCOLPGM(":");
-          SERIAL_PROTOCOL_F(degHotend(cur_extruder),1);
-          SERIAL_PROTOCOLPGM(" /");
-          SERIAL_PROTOCOL_F(degTargetHotend(cur_extruder),1);
-        }
-#else
-			SERIAL_ERROR_START;
-			SERIAL_ERRORLNPGM(MSG_ERR_NO_THERMISTORS);
-#endif
-
-			SERIAL_PROTOCOLPGM(" @:");
-			SERIAL_PROTOCOL(getHeaterPower(tmp_extruder));  
-
-			SERIAL_PROTOCOLPGM(" B@:");
-			SERIAL_PROTOCOL(getHeaterPower(-1));  
+			#if (TEMP_0_PIN > -1)
+				SERIAL_PROTOCOLPGM("ok");
+				for (int8_t cur_extruder = 0; cur_extruder < EXTRUDERS; ++cur_extruder)
+				{
+					SERIAL_PROTOCOLPGM(" T");
+					SERIAL_PROTOCOL(cur_extruder);
+					SERIAL_PROTOCOLPGM(":");
+					SERIAL_PROTOCOL_F(int(degHotend(cur_extruder)),1);
+					SERIAL_PROTOCOLPGM("/");
+					SERIAL_PROTOCOL_F(int(degTargetHotend(cur_extruder)),1);
+				}
+				#if TEMP_BED_PIN > -1
+					SERIAL_PROTOCOLPGM(" B:");
+					SERIAL_PROTOCOL_F(int(degBed()),1);
+					SERIAL_PROTOCOLPGM("/");
+					SERIAL_PROTOCOL_F(int(degTargetBed()),1);
+				#endif //TEMP_BED_PIN
+			#else
+				SERIAL_ERROR_START;
+				SERIAL_ERRORLNPGM(MSG_ERR_NO_THERMISTORS);
+			#endif
 
 			SERIAL_PROTOCOLLN("");
 			return;
 			break;
-		case 109: 
+		case 109:
 			{// M109 - Wait for extruder heater to reach target.
 				if(setTargetedHotend(109)){
 					break;
