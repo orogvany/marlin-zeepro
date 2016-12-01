@@ -22,6 +22,49 @@
     #define MOTHERBOARD 35
 #endif
 
+// Set up which stepper drivers are installed
+#define ALL_DRV_8825 //if you run the standard DRV8825 driver boards (default!)
+//#define XY_TMC_2100 // if you run cubic TMC2100 on just X/Y
+//#define XYZ_TMC_2100 // if you run cubic TMC2100 on X/Y/Z, but not extruders
+//#define ALL_TMC_2100
+
+#ifdef ALL_DRV_8825
+    #define DEFAULT_AXIS_STEPS_PER_UNIT   {201,201,3200,316}        // extruder (last parameter) was 290
+    #define INVERT_X_DIR true    // for Mendel set to false, for Orca set to true
+    #define INVERT_Y_DIR true    // for Mendel set to true, for Orca set to false
+    #define INVERT_Z_DIR false     // for Mendel set to false, for Orca set to true
+    #define INVERT_E0_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
+    #define INVERT_E1_DIR false    // for direct drive extruder v9 set to true, for geared extruder set to false
+    #define INVERT_E2_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
+#endif
+#ifdef XY_TMC_2100
+    #define DEFAULT_AXIS_STEPS_PER_UNIT   {100,100,3200,316}        // extruder (last parameter) was 290
+    #define INVERT_X_DIR false    // for Mendel set to false, for Orca set to true
+    #define INVERT_Y_DIR false    // for Mendel set to true, for Orca set to false
+    #define INVERT_Z_DIR false     // for Mendel set to false, for Orca set to true
+    #define INVERT_E0_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
+    #define INVERT_E1_DIR false    // for direct drive extruder v9 set to true, for geared extruder set to false
+    #define INVERT_E2_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
+#endif
+#ifdef XYZ_TMC_2100
+    #define DEFAULT_AXIS_STEPS_PER_UNIT   {100,100,1600,316}        // extruder (last parameter) was 290
+    #define INVERT_X_DIR false    // for Mendel set to false, for Orca set to true
+    #define INVERT_Y_DIR false    // for Mendel set to true, for Orca set to false
+    #define INVERT_Z_DIR true     // for Mendel set to false, for Orca set to true
+    #define INVERT_E0_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
+    #define INVERT_E1_DIR false    // for direct drive extruder v9 set to true, for geared extruder set to false
+    #define INVERT_E2_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
+#endif
+#ifdef ALL_TMC_2100
+    #define DEFAULT_AXIS_STEPS_PER_UNIT   {100,100,1600,158}        // extruder (last parameter) was 290
+    #define INVERT_X_DIR false    // for Mendel set to false, for Orca set to true
+    #define INVERT_Y_DIR false    // for Mendel set to true, for Orca set to false
+    #define INVERT_Z_DIR true     // for Mendel set to false, for Orca set to true
+    #define INVERT_E0_DIR true   // for direct drive extruder v9 set to true, for geared extruder set to false
+    #define INVERT_E1_DIR true    // for direct drive extruder v9 set to true, for geared extruder set to false
+    #define INVERT_E2_DIR true   // for direct drive extruder v9 set to true, for geared extruder set to false
+#endif
+
 //// The following define selects which power supply you have. Please choose the one that matches your setup
 // 1 = ATX
 // 2 = X-Box 360 203Watts (the blue wire connected to PS_ON and the red wire to VCC)
@@ -246,13 +289,6 @@
 #define DISABLE_Z false
 #define DISABLE_E false // For all extruders
 
-#define INVERT_X_DIR true    // for Mendel set to false, for Orca set to true
-#define INVERT_Y_DIR true    // for Mendel set to true, for Orca set to false
-#define INVERT_Z_DIR false     // for Mendel set to false, for Orca set to true
-#define INVERT_E0_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
-#define INVERT_E1_DIR false    // for direct drive extruder v9 set to true, for geared extruder set to false
-#define INVERT_E2_DIR false   // for direct drive extruder v9 set to true, for geared extruder set to false
-
 // ENDSTOP SETTINGS:
 // Sets direction of endstops when homing; 1=MAX, -1=MIN
 #define X_HOME_DIR -1
@@ -295,7 +331,6 @@ axis steps = nombre de micro pas pour faire un mm = 6400/30 = 213
 */
 
 // default settings 
-#define DEFAULT_AXIS_STEPS_PER_UNIT   {201,201,3200,316}        // extruder (last parameter) was 290
 #define DEFAULT_MAX_FEEDRATE          {1000, 1000, 100, 1000}   // (mm/sec)
 #define DEFAULT_MAX_ACCELERATION      {9000,9000,100,10000}     // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 
